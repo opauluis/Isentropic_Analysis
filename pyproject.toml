@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Isentropic analysis and MAFALDA diagnostics for atmospheric simulations"
 authors = [{ name = "Olivier Pauluis" }]
 requires-python = ">=3.9"
-dependencies = ["numpy"]
+dependencies = ["numpy", "contourpy"]
 
 [project.optional-dependencies]
 io = ["xarray", "netcdf4", "dask", "intake"]

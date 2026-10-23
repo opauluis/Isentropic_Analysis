@@ -23,6 +23,10 @@ pip install -e ".[io,test]" # plus xarray/netCDF/intake for the scripts, and pyt
   isentropic distribution `<f>` (Eq. 1), streamfunction `Psi(z, theta_e)` (Eq. 3), conditional
   means, diabatic tendency `<rho dtheta_e/dt> = -dPsi/dz` and its isentropic mean (Eq. 10),
   and the two-stream mean ascent/descent `M_up`, `M_down`, `f_up`, `f_down` (Eqs. 14-17).
+- `isentropic/mafalda.py`: MAFALDA (Pauluis 2016): mean trajectories as isolines of `Psi`
+  (Eq. 5), conditional means along them (Eq. 6), and the work decomposition of each cycle
+  `Wmax = Wb + Wp + Dg` (Eq. 12). `thermo_fields` gives the point-wise entropy and Gibbs
+  free energies to bin alongside the other fields.
 - `scripts/cloud_botany_iso.py`: isentropic binning of one member/time of the Cloud Botany
   DALES ensemble (EUREC4A intake catalog).
 
@@ -45,6 +49,13 @@ z = ds.height.values
 psi = iso.streamfunction(mf, area)                   # kg m-2 s-1
 the_mean = iso.conditional_mean(ds.ATHE.sum('time').values, area)
 ts = iso.two_stream(mf, area, {'qt': ds.RHOWQT.sum('time').values})
+
+# MAFALDA: needs conditional means of T, s, b, rt, rv, gv, ... on the same (z, theta_e) grid
+dth = ds.theta_e[1] - ds.theta_e[0]
+theta = ds.theta_e.values
+fields = {'T': T_mean, 's': s_mean, 'b': b_mean, 'rt': rt_mean, 'rv': rv_mean, 'gv': gv_mean}
+cycles = iso.mafalda.mafalda(psi, z, theta + dth / 2, theta, fields, n=20)
+power = {key: sum(c['dpsi'] * c[key] for c in cycles) for key in ('Wmax', 'Wb', 'Wp', 'Dg')}  # W m-2
 ```
 
 ## Tests
