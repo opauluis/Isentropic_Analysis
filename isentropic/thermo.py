@@ -10,10 +10,9 @@
 # Energy in J/kg
 # Entropy in J/kg/K
 
-from numpy import log,exp,minimum, maximum
-from numba import jit
+from numpy import log,exp,minimum,maximum
 
-# Heat capacity of dry air, water vapor, liquid water, and ice (J/Kg/K)
+# Heat capcity of dyr air, watr valor, liquid water and ice
 
 Cpd = 1007.
 Cpvap = 1880
@@ -39,8 +38,7 @@ Pref = 1.0e5
 #For virtual temperature
 Rrat = Rvap / Rd - 1.0
 
-
-
+#@jit
 def es_water(T):
     '''Saturation vapor pressure over water at tempertaure T (in K)'''
     C1 = -9.09718
@@ -64,13 +62,15 @@ def es_water(T):
     F1 = C5*(C - 1.0)
     F3 = C7*(exp(E1) - 1.0)
     F4 = C8*(exp(E2) - 1.0)
+#    F2 = C6*log(C,10)
     F2 = C6*log(C)/ln10
     B  = ln10*(F1 + F2 + F3 + F4 + F5)
     A  = 1.0
     
-    ESAT = A*np.exp(B)
+    ESAT = A*exp(B)
     return ESAT
 
+#@jit
 def es_ice(T):
     '''Saturation vapor pressure over ice at temperature T(K)'''
 
@@ -94,6 +94,7 @@ def es_ice(T):
 
     return ESAT
 
+#@jit
 def es_mix(T):
     '''stauration vapor over water (T>0C) or ice (T<0C)'''
     esw = es_water(T)
@@ -101,12 +102,14 @@ def es_mix(T):
     esat = minimum(esi,esw)
     return esat
 
+#@jit
 def vapor_pressure(P,rv):
     '''partial pressure of water vapor'''
     E = P* Rvap * rv /(Rd +   Rvap *rv)
     return E
 
-def mixing_ratio(P,e):
+#@jit
+def mixing_ratio(P,E):
     '''mixing ratio of water vapor'''
     rv = Rd * E /(P  - E )/   Rvap
     return rv
@@ -117,7 +120,7 @@ def sat_mixing_ratio(P,T):
 #    ES = min(es_water(T),P -1.0e-10)    
     rv = Rd * ES /(P  - ES )/   Rvap
     return rv
-
+#@jit
 def moist_entropy(P,T,rv,rl,ri):
     '''moist entropy as function of pressure, temperature, and mixing ration for water vapor, liquid water and ice'''
 
@@ -129,6 +132,7 @@ def moist_entropy(P,T,rv,rl,ri):
     entropy =  CP * log(T/Tref) - Rd *  log(Pd/Pref) - rv * Rvap *log(E/esat) +  rv*LV/T - Lf0*ri/ Tref
     return entropy
 
+#@jit
 def ice_entropy(P,T,rv,rl,ri):
     '''entropy over ice as function of pressure, temperature, and mixing ration for water vapor, liquid water and ice'''
 
@@ -138,9 +142,10 @@ def ice_entropy(P,T,rv,rl,ri):
     CP = Cpd + (rv + rl) * Cliq + ri * Cice
     LV = Lv0 + (Cpvap - Cliq ) * (T - Tref)
 
-    S =  CP * log (T/Tref) - Rd *  log(Pd/Pref) - rv * Rvap *log(E/esat) +  rv*Lv/T + Lf0*(rv+rl)/ Tref
+    S =  CP * log (T/Tref) - Rd *  log(Pd/Pref) - rv * Rvap *log(E/esat) +  rv*LV/T + Lf0*(rv+rl)/ Tref
     return S
 
+#@jit
 def equivalent_potential_temperature(P,T,rv,rl,ri):
     ''' Equivalent potential temperature, based on Emanuel (1994), but includes ice phase contribution.'''
 
@@ -150,15 +155,29 @@ def equivalent_potential_temperature(P,T,rv,rl,ri):
     THETA_E= Tref * exp(S/CP)
     return THETA_E
 
+#@jit
 def frozen_equivalent_potential_temperature(P,T,rv,rl,ri):
     ''' Frozen equivalent potential temperature, based on Pauluis (2018).'''
 
-    S = moist_entropy_ice(P,T,rv, rl, ri)
+    S = ice_entropy(P,T,rv, rl, ri)
     rt = rv + rl + ri
     CP =  Cpd + rt * Cice
     THETA_E= Tref * exp(S/CP)
     return THETA_E
 
+#@jit
+#def mixed_equivalent_potential_temperature(P,T,rv,rl,ri,ri_max = 0.01):
+#    ''' Frozen equivalent potential temperature, based on Pauluis (2018).'''
+#
+#    S = ice_entropy(P,T,rv, rl, ri)
+#    rt = rv + rl + ri
+#    ri_ref = np.maximum(rt,ri_max)
+#    rl_ref = rt - ri_ref
+#    CP =  Cpd + ri_ref * Cice = rl_ref * Cliq
+#    THETA_E= Tref * exp(S/CP)
+#    return THETA_E
+
+#@jit
 def Gibbs_vapor(P,T,rv):
     '''Gibbs free energy for water vapor'''
     ES=es_water(T)
@@ -166,21 +185,35 @@ def Gibbs_vapor(P,T,rv):
     GV = Cliq* ( T-Tref - T*(log(T/Tref))) + Rvap * T * log(E/ES)
     return GV
 
+#@jit
 def Gibbs_liquid(T):
     '''Gibbs free energy for liquid water'''
     GL = Cliq* ( T-Tref - T*(log(T/Tref))) 
     return GL
 
+#@jit
 def Gibbs_water(T):
     '''Gibbs free energy for liquid water'''
     GL = Cliq* ( T-Tref - T*(log(T/Tref))) 
     return GL
 
+#@jit
 def Gibbs_ice(T):
     '''Gibbs free energy for liquid water'''
     GI = Cice* ( T-Tref - T*(log(T/Tref))) + Lf0 * (T/Tref - 1.0) 
     return GI
+#@jit
 
+def moist_enthalpy(T,rv,rl,ri):
+    '''moist enthalpy as function of pressure, temperature, and mixing ratio for water vapor, liquid water and ice'''
+
+    CP = Cpd + (rv + rl) * Cliq + ri * Cice
+    LV = Lv0 + (Cpvap - Cliq ) * (T - Tref)
+    enthalpy =  CP * (T - Tref)   +  rv*LV - Lf0*ri
+    return enthalpy
+
+
+#@jit
 def saturated_moist_entropy(P,T,rt):
     '''saturated moist entropy as function of pressure, temperature, and total water'''
     esat=es_water(T)
@@ -193,6 +226,7 @@ def saturated_moist_entropy(P,T,rt):
     entropy =  CP * log(T/Tref) - Rd *  log(Pd/Pref) - rv * Rvap *log(E/esat) +  rv*LV/T 
     return entropy,rv,rl
 
+#@jit
 def saturated_moist_entropy_ice(P,T,rt):
     '''saturated moist entropy as function of pressure, temperature, and total water, assuming condensed water is in ice form'''
     esat=es_ice(T)
@@ -205,6 +239,7 @@ def saturated_moist_entropy_ice(P,T,rt):
     entropy =  CP * log(T/Tref) - Rd *  log(Pd/Pref) - rv * Rvap *log(E/esat) +  rv*LV/T - ri * Lf0/Tref 
     return entropy,rv,ri
 
+#@jit
 def saturated_moist_entropy_triple(P,rt,rl):
     '''saturated moist entropy as function of pressure, total water and ice water at the triple point '''
     esat=es_water(Tref)
@@ -212,11 +247,12 @@ def saturated_moist_entropy_triple(P,rt,rl):
     E = vapor_pressure(P,rv)
     Pd = P - E
     rlt = minimum(rt-rv,rl)
-    ri = max(rt - rlt,0.)
+    ri = maximum(rt - rlt,0.)
     LV = Lv0 
     entropy =   - Rd *  log(Pd/Pref) - rv * Rvap *log(E/esat) +  rv*LV/Tref - ri * Lf0/Tref 
     return entropy,rv,ri
 
+#@jit
 def alpha_dry(P,T,rv):
     '''specific volume per unit mass of dry air as function of pressure, temperature and mixing ratio'''
     alpha = (Rd + Rvap * rv) * T / P
@@ -231,3 +267,6 @@ def density_dry(p,T,rv,rl,ri):
     '''density  as function of pressure, temperature and mixing ratio'''
     rho_d = p / (Rd + Rvap * rv) / T
     return rho_d
+
+
+    
