@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "isentropic"
+version = "0.1.0"
+description = "Isentropic analysis and MAFALDA diagnostics for atmospheric simulations"
+authors = [{ name = "Olivier Pauluis" }]
+requires-python = ">=3.9"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+io = ["xarray", "netcdf4", "dask", "intake"]
+test = ["pytest"]
+
+[tool.setuptools]
+packages = ["isentropic"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
