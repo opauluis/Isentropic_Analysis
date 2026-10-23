@@ -19,11 +19,32 @@ pip install -e ".[io,test]" # plus xarray/netCDF/intake for the scripts, and pyt
 - `isentropic/binning.py`: conditional sums in (z, theta_e) coordinates
   (`iso_integral`, `iso_multi_integral`, `iso_multicell_integral`) and time-averaged
   conditional means (`iso_average`).
+- `isentropic/analysis.py`: diagnostics from the conditional sums (Pauluis and Mrowiec 2013):
+  isentropic distribution `<f>` (Eq. 1), streamfunction `Psi(z, theta_e)` (Eq. 3), conditional
+  means, diabatic tendency `<rho dtheta_e/dt> = -dPsi/dz` and its isentropic mean (Eq. 10),
+  and the two-stream mean ascent/descent `M_up`, `M_down`, `f_up`, `f_down` (Eqs. 14-17).
 - `scripts/cloud_botany_iso.py`: isentropic binning of one member/time of the Cloud Botany
   DALES ensemble (EUREC4A intake catalog).
 
 ```
 python scripts/cloud_botany_iso.py MEMBER TIME [SAVE_DIR]
+```
+
+## Example
+
+```python
+import numpy as np
+import xarray as xr
+import isentropic as iso
+
+ds = xr.open_mfdataset('CB_ISO_EXP_001_TIME_*.nc')   # output of scripts/cloud_botany_iso.py
+area = ds.AREA.sum('time').values                    # sum over times = time average
+mf = ds.MF.sum('time').values
+z = ds.height.values
+
+psi = iso.streamfunction(mf, area)                   # kg m-2 s-1
+the_mean = iso.conditional_mean(ds.ATHE.sum('time').values, area)
+ts = iso.two_stream(mf, area, {'qt': ds.RHOWQT.sum('time').values})
 ```
 
 ## Tests
