@@ -9,6 +9,13 @@ Pauluis and Zhang 2017).
 ```
 pip install -e .            # core (numpy only)
 pip install -e ".[io,test]" # plus xarray/netCDF/intake for the scripts, and pytest
+pip install -e ".[io,notebook]"  # plus JupyterLab, ipykernel and matplotlib
+```
+
+To use the environment from a shared Jupyter (e.g. Open OnDemand), register it as a kernel:
+
+```
+python -m ipykernel install --user --name iso --display-name "Python (iso)"
 ```
 
 ## Contents
