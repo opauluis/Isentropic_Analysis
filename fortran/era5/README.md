@@ -28,6 +28,21 @@ locations default to the Casper RDA paths and can be changed with the environmen
 (surface geopotential). Grid sizes, levels and number of hours are read from the files.
 The computation is in double precision (output stored in single precision) and needs about 7 GB of memory.
 
+### A full year on Casper
+
+`era5_iso_year.pbs` is a PBS job array with one day per subjob (8 GB, 15 min each; a day takes
+about 6 GB and 2 min):
+
+```
+cd fortran/era5
+qsub -v YEAR=2020 era5_iso_year.pbs
+qsub -v YEAR=2020,OUT_DIR=/path/to/out era5_iso_year.pbs   # other output directory
+qstat -u $USER                                              # progress (array shows as 1234567[])
+```
+
+Days with a readable output file are skipped, so resubmitting the same command reruns only the
+days that failed (`FORCE=1` reruns all). Change `#PBS -A` in the script for another project code.
+
 ## Output
 
 | variable | dims (netCDF order) | content |
