@@ -1,6 +1,6 @@
 # Build the ERA5 isentropic analysis
 #   make                 gfortran (default)
-#   make FC=ifort        Intel (NCAR Casper: module load intel netcdf)
+#   make FC=ifx          Intel (NCAR Casper: module load intel netcdf; ifort also works)
 # netCDF-Fortran flags come from nf-config.
 
 FC ?= gfortran

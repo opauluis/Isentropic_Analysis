@@ -1,7 +1,7 @@
 ! Daily isentropic analysis of ERA5 on pressure levels (theta_e coordinates)
 ! Olivier Pauluis
 !
-! Reads the 24 hourly ERA5 analyses of one day (RDA ds633.0, 0.25 deg), computes theta_e, moist
+! Reads the 24 hourly ERA5 analyses of one day (RDA d633000, 0.25 deg), computes theta_e, moist
 ! entropy and enthalpy, splits omega into its zonal mean, zonal wavenumbers 1-3, 4-10 and the
 ! remainder, and bins mass flux and tracers in theta_e on 3x3 degree boxes. Points below the
 ! surface (Z < Z_sfc) are left out. Output is the daily mean of the conditional sums and the
@@ -23,8 +23,8 @@ program era5_iso
 
   integer, parameter :: dp = kind(1.0d0)
 
-  character(len=*), parameter :: DIR_ERA5_DEFAULT = "/glade/campaign/collections/rda/data/ds633.0/e5.oper.an.pl/"
-  character(len=*), parameter :: FILE_ZS_DEFAULT = "/glade/campaign/collections/rda/data/ds633.0/" // &
+  character(len=*), parameter :: DIR_ERA5_DEFAULT = "/glade/campaign/collections/rda/data/d633000/e5.oper.an.pl/"
+  character(len=*), parameter :: FILE_ZS_DEFAULT = "/glade/campaign/collections/rda/data/d633000/" // &
        "e5.oper.invariant/197901/e5.oper.invariant.128_129_z.ll025sc.1979010100_1979010100.nc"
   character(len=*), parameter :: DIR_OUT_DEFAULT = "/glade/derecho/scratch/pauluis/ERA5/ISO/THETAE/"
   character(len=*), parameter :: FILE_OUT = "ERA5_STR_THE."
@@ -323,7 +323,7 @@ program era5_iso
   do n = 1, NFZ
     call def_field(STR_NAME(n), [the_dimid, z_dimid, rec_dimid], varid_strz(n))
   end do
-  call check(nf90_put_att(ncid_out, NF90_GLOBAL, "source", "ERA5 hourly pressure levels, RDA ds633.0"))
+  call check(nf90_put_att(ncid_out, NF90_GLOBAL, "source", "ERA5 hourly pressure levels, RDA d633000"))
   call check(nf90_put_att(ncid_out, NF90_GLOBAL, "date", yearname // "-" // monthname // "-" // dayname))
   call check(nf90_enddef(ncid_out))
 

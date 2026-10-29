@@ -1,6 +1,6 @@
 # ERA5 isentropic analysis (Fortran)
 
-Daily isentropic analysis of ERA5 hourly pressure-level data (RDA ds633.0, 0.25°) in
+Daily isentropic analysis of ERA5 hourly pressure-level data (RDA d633000, 0.25°) in
 equivalent potential temperature coordinates. For one day, the program
 
 1. reads T, Q, W (omega), Z and the four condensates (CLWC, CRWC, CIWC, CSWC) on the levels from
@@ -16,8 +16,8 @@ equivalent potential temperature coordinates. For one day, the program
 ## Build and run
 
 ```
-module load intel netcdf     # NCAR Casper
-make FC=ifort                # or: make  (gfortran)
+module load intel netcdf     # NCAR Casper (Intel 2025: ifx only)
+make FC=ifx                  # or: make  (gfortran)
 ./era5_iso.exe 2020 1 15 [OUT_DIR]
 ```
 
