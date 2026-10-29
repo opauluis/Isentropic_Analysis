@@ -37,6 +37,9 @@ python -m ipykernel install --user --name iso --display-name "Python (iso)"
 python scripts/cloud_botany_iso.py MEMBER TIME [SAVE_DIR]
 ```
 
+- `fortran/era5/`: Fortran program for the daily isentropic analysis of ERA5 on pressure
+  levels (theta_e bins, 3°×3° boxes, zonal-wavenumber decomposition of omega); see its README.
+
 ## Example
 
 ```python

@@ -18,3 +18,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[test]"
       - run: pytest -q
+
+  fortran:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y gfortran libnetcdff-dev
+      - run: pip install -e ".[test]" netCDF4
+      - run: pytest -q tests/test_fortran_era5.py
