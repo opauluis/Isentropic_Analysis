@@ -27,8 +27,9 @@ NBIN, THE_MIN, THE_MAX = 181, 200.0, 380.0
 RADIUS = 6378e3
 
 # constants and esat of iso_thermo.F90
-CPAIR, RD, CPV, CL, CI = 1004.0, 287.0, 1880.0, 4218.0, 2106.0
-LF0, LV0, TREF, RVAP, PREF = 333600.0, 2510400.0, 273.15, 461.0, 1.0e5
+CPAIR, RD, CPV, CL, CI = 1007.0, 287.04, 1880.0, 4218.0, 2106.0
+LF0, LV0, TREF, RVAP, PREF = 333.7e3, 2500.0e3, 273.15, 461.5, 1.0e5
+GRAV = 9.81
 A_ESAT = [6.11239921, 0.443987641, 0.142986287e-1, 0.264847430e-3, 0.302950461e-5, 0.206739458e-7,
           0.640689451e-10, -0.952447341e-13, -0.976195544e-15]
 
@@ -102,7 +103,7 @@ def reference(lat, lon, fields, zs, nlon_slice=12, nlat_slice=13, p_top=150.0):
     acc = np.zeros((12, NBIN, nx, ny, nlev))
     accz = np.zeros((4, NBIN, ny, nlev))
     for it in range(NT):
-        t, w, gz = f["T"][it], f["W"][it], f["Z"][it]
+        t, w, gz = f["T"][it], f["W"][it] / GRAV, f["Z"][it]
         qv = np.maximum(f["Q"][it], 1e-10)
         qi = f["CSWC"][it] + f["CIWC"][it]
         ql = f["CRWC"][it] + f["CLWC"][it]
@@ -115,7 +116,7 @@ def reference(lat, lon, fields, zs, nlon_slice=12, nlat_slice=13, p_top=150.0):
         pd = p - np.minimum(e, es)
         lv = LV0 + (t - TREF) * (CPV - CL)
         cp = CPAIR + (r + rl) * CL + ri * CI
-        s = cp * np.log(t / TREF) - RD * np.log(pd / PREF) + lv * r / t - LF0 * ri / t - RVAP * r * np.log(e / es)
+        s = cp * np.log(t / TREF) - RD * np.log(pd / PREF) + lv * r / t - LF0 * ri / TREF - RVAP * r * np.log(e / es)
         the = TREF * np.exp(s / (CPAIR + (r + rl + ri) * CL))
         h = cp * (t - TREF) + lv * r - LF0 * ri
 
@@ -151,11 +152,11 @@ def reference(lat, lon, fields, zs, nlon_slice=12, nlat_slice=13, p_top=150.0):
 
     area, mf = acc[0], acc[1]
     out = {name: acc[n] for n, name in enumerate(
-        ["AREA_THE", "MF_THE", "RHOT_THE", "RHOQ_THE", "RHOZ_THE", "RHOS_THE", "RHOH_THE", "RHOQL_THE",
+        ["AREA_THE", "MFC_THE", "RHOT_THE", "RHOQ_THE", "RHOZ_THE", "RHOS_THE", "RHOH_THE", "RHOQL_THE",
          "RHOQI_THE", "RHOWQ_THE", "RHOWQL_THE", "RHOWQI_THE"])}
-    out["MF_THE"] = mf - mean_w(mf.sum((0, 1, 2)), area.sum((0, 1, 2))) * area
-    out["MFC_THE"] = mf - mean_w(mf.sum(0), area.sum(0)) * area
-    out["STR_THE"] = np.cumsum(out["MF_THE"].sum((1, 2)), axis=0)
+    out["MFC_THE"] = mf - mean_w(mf.sum((0, 1, 2)), area.sum((0, 1, 2))) * area
+    out["MFCNV_THE"] = mf - mean_w(mf.sum(0), area.sum(0)) * area
+    out["STR_THE"] = np.cumsum(out["MFC_THE"].sum((1, 2)), axis=0)
     area_y = area.sum(1)
     mfz = accz.copy()
     mfz[0] -= mean_w(mfz[0].sum((0, 1)), area_y.sum((0, 1))) * area_y
@@ -220,6 +221,6 @@ def test_area_covers_sphere(run):
 
 def test_column_mean_removed(run):
     out, _, _ = run
-    mfc = out["MFC_THE"].sum(0)
-    scale = np.abs(out["MF_THE"]).sum(0).max()
+    mfc = out["MFCNV_THE"].sum(0)
+    scale = np.abs(out["MFC_THE"]).sum(0).max()
     assert np.abs(mfc).max() < 1e-4 * scale

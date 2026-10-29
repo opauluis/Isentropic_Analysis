@@ -11,7 +11,7 @@
 !   writes OUT_DIR/YYYY/ERA5_STR_THE.YYYY_MM_DD.nc
 !   ERA5_PL_DIR and ERA5_ZS_FILE (environment) override the input locations on Casper.
 !
-! Mass fluxes are omega * area (Pa m2 s-1). Box coordinates follow the ERA5 order, so latitude
+! Mass fluxes are omega * area / g (kg s-1), positive downward. Box coordinates follow the ERA5 order, so latitude
 ! runs from north to south.
 
 program era5_iso
@@ -37,6 +37,7 @@ program era5_iso
   real, parameter :: P_TOP = 150.0
 
   real(dp), parameter :: radius = 6378e3_dp
+  real, parameter :: grav = 9.81
 
   ! input fields, in the order of the files
   integer, parameter :: NVAR = 8
@@ -49,7 +50,7 @@ program era5_iso
   ! binned fields on (theta_e, lon, lat, press)
   integer, parameter :: NF = 12
   integer, parameter :: fAREA = 1, fMF = 2, fT = 3
-  character(len=10), parameter :: F_NAME(NF) = [character(len=10) :: "AREA_THE", "MF_THE", "RHOT_THE", &
+  character(len=10), parameter :: F_NAME(NF) = [character(len=10) :: "AREA_THE", "MFC_THE", "RHOT_THE", &
        "RHOQ_THE", "RHOZ_THE", "RHOS_THE", "RHOH_THE", "RHOQL_THE", "RHOQI_THE", "RHOWQ_THE", &
        "RHOWQL_THE", "RHOWQI_THE"]
   ! binned omega components on (theta_e, lat, press)
@@ -182,6 +183,7 @@ program era5_iso
     call read_level_field(iT, temp)
     call read_level_field(iQ, sphum)
     call read_level_field(iW, omega)
+    omega = omega / grav
     call read_level_field(iZ, GZ)
     sphum = max(sphum, 1e-10)
 
@@ -309,11 +311,11 @@ program era5_iso
   do n = 1, NF
     call def_field(F_NAME(n), [the_dimid, x_dimid, y_dimid, z_dimid, rec_dimid], varid_out(n))
   end do
-  call def_field("MFC_THE", [the_dimid, x_dimid, y_dimid, z_dimid, rec_dimid], varid_out(NF + 1))
+  call def_field("MFCNV_THE", [the_dimid, x_dimid, y_dimid, z_dimid, rec_dimid], varid_out(NF + 1))
   call check(nf90_put_att(ncid_out, varid_out(fMF), "long_name", &
-       "mass flux (omega * area), mean over each pressure level removed"))
+       "mass flux (omega * area / g), mean over each pressure level removed"))
   call check(nf90_put_att(ncid_out, varid_out(NF + 1), "long_name", &
-       "mass flux (omega * area), mean over each column removed"))
+       "mass flux (omega * area / g), mean over each column removed"))
   do n = 1, NFZ
     call def_field(FZ_NAME(n), [the_dimid, y_dimid, z_dimid, rec_dimid], varid_z(n))
   end do

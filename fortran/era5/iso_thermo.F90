@@ -1,6 +1,7 @@
 ! Moist thermodynamics for the ERA5 isentropic analysis
 ! Olivier Pauluis
 !
+! Constants and formulas are those of isentropic/thermo.py, except for the saturation vapor pressure.
 ! Mixing ratios are per unit mass of dry air, computed from the ERA5 specific humidities.
 ! Entropy and enthalpy use liquid water at TREF as reference state; the equivalent potential
 ! temperature is theta_e = TREF * exp(s / (CPAIR + r_t CL)).
@@ -14,15 +15,15 @@ module iso_thermo
 
   integer, parameter :: dp = kind(1.0d0)
 
-  real(dp), parameter :: CPAIR = 1004.0_dp
-  real(dp), parameter :: RD = 287.0_dp
+  real(dp), parameter :: CPAIR = 1007.0_dp
+  real(dp), parameter :: RD = 287.04_dp
   real(dp), parameter :: CPV = 1880.0_dp
   real(dp), parameter :: CL = 4218.0_dp
   real(dp), parameter :: CI = 2106.0_dp
-  real(dp), parameter :: LF0 = 333600.0_dp
-  real(dp), parameter :: LV0 = 2510400.0_dp
+  real(dp), parameter :: LF0 = 333.7e3_dp
+  real(dp), parameter :: LV0 = 2500.0e3_dp
   real(dp), parameter :: TREF = 273.15_dp
-  real(dp), parameter :: RVAP = 461.0_dp
+  real(dp), parameter :: RVAP = 461.5_dp
   real(dp), parameter :: PREF = 1.0e5_dp
 
 contains
@@ -48,7 +49,7 @@ contains
     cp = CPAIR + (r + rl) * CL + ri * CI
     cp0 = CPAIR + rt * CL
 
-    s = real(cp * log(t / TREF) - RD * log(pd / PREF) + lv * r / t - LF0 * ri / t &
+    s = real(cp * log(t / TREF) - RD * log(pd / PREF) + lv * r / t - LF0 * ri / TREF &
          - RVAP * r * log(e / es))
     theta_e = real(TREF * exp(s / cp0))
     h = real(cp * (t - TREF) + lv * r - LF0 * ri)
