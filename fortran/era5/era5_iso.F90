@@ -11,6 +11,7 @@
 !   writes OUT_DIR/YYYY/ERA5_STR_THE.YYYY_MM_DD.nc
 !   ERA5_PL_DIR and ERA5_ZS_FILE (environment) override the input locations on Casper.
 !
+! Computations are in double precision; the output is stored in single precision.
 ! Mass fluxes are omega * area / g (kg s-1), positive downward. Box coordinates follow the ERA5 order, so latitude
 ! runs from north to south.
 
@@ -30,14 +31,14 @@ program era5_iso
 
   ! theta_e bins
   integer, parameter :: NBIN = 181
-  real, parameter :: THE_MIN = 200.0, THE_MAX = 380.0
+  real(dp), parameter :: THE_MIN = 200.0_dp, THE_MAX = 380.0_dp
   ! output boxes: 12 longitudes, 13 latitudes with the edge rows shared by neighbouring boxes
   integer, parameter :: nlon_slice = 12, nlat_slice = 13
   ! top pressure level (hPa)
-  real, parameter :: P_TOP = 150.0
+  real(dp), parameter :: P_TOP = 150.0_dp
 
   real(dp), parameter :: radius = 6378e3_dp
-  real, parameter :: grav = 9.81
+  real(dp), parameter :: grav = 9.81_dp
 
   ! input fields, in the order of the files
   integer, parameter :: NVAR = 8
@@ -66,22 +67,22 @@ program era5_iso
   integer :: year, month, day
 
   integer :: NLON, NLAT, NLEV, NX, NY, ntime, nlev_file, level_start
-  real, allocatable :: lat(:), lon(:), pressure(:), press(:), lat_out(:), lon_out(:), the_lev(:)
+  real(dp), allocatable :: lat(:), lon(:), pressure(:), press(:), lat_out(:), lon_out(:), the_lev(:)
   real(dp), allocatable :: area_row(:)
-  real, allocatable :: temp(:,:,:), sphum(:,:,:), omega(:,:,:), qliq(:,:,:), qice(:,:,:), GZ(:,:,:), GZS(:,:)
-  real, allocatable :: dummy(:,:,:), entropy(:,:,:), enthalpy(:,:,:), theta_e(:,:,:)
-  real, allocatable :: O0(:,:,:), O13(:,:,:), O410(:,:,:), OSW(:,:,:)
+  real(dp), allocatable :: temp(:,:,:), sphum(:,:,:), omega(:,:,:), qliq(:,:,:), qice(:,:,:), GZ(:,:,:), GZS(:,:)
+  real(dp), allocatable :: dummy(:,:,:), entropy(:,:,:), enthalpy(:,:,:), theta_e(:,:,:)
+  real(dp), allocatable :: O0(:,:,:), O13(:,:,:), O410(:,:,:), OSW(:,:,:)
   logical, allocatable :: above(:)
-  real, allocatable :: ACC(:,:,:,:,:), ACCZ(:,:,:,:)
-  real, allocatable :: MFC_THE(:,:,:,:), MFCNV_THE(:,:,:,:), AREA_Y(:,:,:)
-  real, allocatable :: STR_THE(:,:), STRZ_THE(:,:,:)
+  real(dp), allocatable :: ACC(:,:,:,:,:), ACCZ(:,:,:,:)
+  real(dp), allocatable :: MFC_THE(:,:,:,:), MFCNV_THE(:,:,:,:), AREA_Y(:,:,:)
+  real(dp), allocatable :: STR_THE(:,:), STRZ_THE(:,:,:)
   real(dp), allocatable :: WNET(:), WLAT(:,:), WCOL(:,:,:)
 
   integer :: ncid(NVAR), varid(NVAR), ncid_zs, varid_zs, varid_c
   integer :: ncid_out, x_dimid, y_dimid, z_dimid, the_dimid, rec_dimid
   integer :: varid_out(NF + 1), varid_z(NFZ), varid_str, varid_strz(NFZ), varid_coord(4)
   integer :: istep, i, j, k, l, n, ibin, jbin, isl, jsl, bin_ind, b
-  real :: x, weight, w(2), vals(NF), valz(NFZ), weight_slc(nlat_slice), dthe
+  real(dp) :: x, weight, w(2), vals(NF), valz(NFZ), weight_slc(nlat_slice), dthe
   real(dp) :: dlat, pi
 
   pi = 4.0_dp * atan(1.0_dp)
@@ -133,7 +134,7 @@ program era5_iso
   level_start = findloc(pressure >= P_TOP, .true., 1)
   NLEV = nlev_file - level_start + 1
   allocate(press(NLEV))
-  press = 100.0 * pressure(level_start:nlev_file)
+  press = 100.0_dp * pressure(level_start:nlev_file)
 
   if (mod(NLON, nlon_slice) /= 0 .or. mod(NLAT - 1, nlat_slice - 1) /= 0) then
     print *, 'Grid ', NLON, NLAT, ' does not fit the ', nlon_slice, nlat_slice, ' boxes'
@@ -145,10 +146,10 @@ program era5_iso
   ! grid-cell area, and output coordinates at the box centres
   dlat = abs(lat(2) - lat(1)) * pi / 180.0_dp
   allocate(area_row(NLAT))
-  area_row = radius**2 * (2.0_dp * pi / NLON) * dlat * max(cos(pi * real(lat, dp) / 180.0_dp), 0.0_dp)
-  weight_slc = 1.0
-  weight_slc(1) = 0.5
-  weight_slc(nlat_slice) = 0.5
+  area_row = radius**2 * (2.0_dp * pi / NLON) * dlat * max(cos(pi * lat / 180.0_dp), 0.0_dp)
+  weight_slc = 1.0_dp
+  weight_slc(1) = 0.5_dp
+  weight_slc(nlat_slice) = 0.5_dp
 
   allocate(lat_out(NY), lon_out(NX), the_lev(NBIN))
   do jbin = 1, NY
@@ -174,8 +175,8 @@ program era5_iso
   allocate(O0(NLON, NLAT, NLEV), O13(NLON, NLAT, NLEV), O410(NLON, NLAT, NLEV), OSW(NLON, NLAT, NLEV))
   allocate(above(NLON))
   allocate(ACC(NF, NBIN, NX, NY, NLEV), ACCZ(NFZ, NBIN, NY, NLEV))
-  ACC = 0.0
-  ACCZ = 0.0
+  ACC = 0.0_dp
+  ACCZ = 0.0_dp
 
   do istep = 1, ntime
     print *, "timestep :", istep
@@ -185,7 +186,7 @@ program era5_iso
     call read_level_field(iW, omega)
     omega = omega / grav
     call read_level_field(iZ, GZ)
-    sphum = max(sphum, 1e-10)
+    sphum = max(sphum, 1e-10_dp)
 
     ! condensates: snow + cloud ice, rain + cloud liquid
     call read_level_field(iCSWC, qice)
@@ -204,11 +205,11 @@ program era5_iso
     do k = 1, NLEV
       do j = 1, NLAT
         above = GZ(:,j,k) > GZS(:,j)
-        dummy(:,j,k) = merge(omega(:,j,k), 0.0, above)
+        dummy(:,j,k) = merge(omega(:,j,k), 0.0_dp, above)
         if (count(above) > 0) then
           O0(:,j,k) = sum(dummy(:,j,k)) / count(above)
         else
-          O0(:,j,k) = 0.0
+          O0(:,j,k) = 0.0_dp
         end if
         O13(:,j,k) = band_pass(dummy(:,j,k), 1, 3)
         O410(:,j,k) = band_pass(dummy(:,j,k), 4, 10)
@@ -227,10 +228,10 @@ program era5_iso
               if (GZ(i,j,k) > GZS(i,j)) then
                 x = (theta_e(i,j,k) - THE_MIN) / dthe
                 bin_ind = min(max(ceiling(x), 1), NBIN)
-                weight = min(max(bin_ind - x, 0.0), 1.0)
-                w = real(area_row(j)) * weight_slc(jsl) * [weight, 1.0 - weight]
+                weight = min(max(bin_ind - x, 0.0_dp), 1.0_dp)
+                w = area_row(j) * weight_slc(jsl) * [weight, 1.0_dp - weight]
 
-                vals = [1.0, omega(i,j,k), temp(i,j,k), sphum(i,j,k), GZ(i,j,k), entropy(i,j,k), &
+                vals = [1.0_dp, omega(i,j,k), temp(i,j,k), sphum(i,j,k), GZ(i,j,k), entropy(i,j,k), &
                      enthalpy(i,j,k), qliq(i,j,k), qice(i,j,k), sphum(i,j,k) * omega(i,j,k), &
                      qliq(i,j,k) * omega(i,j,k), qice(i,j,k) * omega(i,j,k)]
                 valz = [O0(i,j,k), O13(i,j,k), O410(i,j,k), OSW(i,j,k)]
@@ -261,35 +262,34 @@ program era5_iso
   ! (wavenumber components) and over each column (MFCNV_THE)
   allocate(WNET(NLEV), WLAT(NY, NLEV), WCOL(NX, NY, NLEV), AREA_Y(NBIN, NY, NLEV))
   AREA_Y = sum(ACC(fAREA,:,:,:,:), 2)
-  WNET = mean_w(sum(sum(sum(real(ACC(fMF,:,:,:,:), dp), 1), 1), 1), &
-       sum(sum(sum(real(ACC(fAREA,:,:,:,:), dp), 1), 1), 1))
-  WCOL = mean_w(sum(real(ACC(fMF,:,:,:,:), dp), 1), sum(real(ACC(fAREA,:,:,:,:), dp), 1))
+  WNET = mean_w(sum(sum(sum(ACC(fMF,:,:,:,:), 1), 1), 1), sum(sum(sum(ACC(fAREA,:,:,:,:), 1), 1), 1))
+  WCOL = mean_w(sum(ACC(fMF,:,:,:,:), 1), sum(ACC(fAREA,:,:,:,:), 1))
 
   allocate(MFC_THE(NBIN, NX, NY, NLEV), MFCNV_THE(NBIN, NX, NY, NLEV))
   do k = 1, NLEV
-    MFC_THE(:,:,:,k) = ACC(fMF,:,:,:,k) - real(WNET(k)) * ACC(fAREA,:,:,:,k)
+    MFC_THE(:,:,:,k) = ACC(fMF,:,:,:,k) - WNET(k) * ACC(fAREA,:,:,:,k)
     do i = 1, NBIN
-      MFCNV_THE(i,:,:,k) = ACC(fMF,i,:,:,k) - real(WCOL(:,:,k)) * ACC(fAREA,i,:,:,k)
+      MFCNV_THE(i,:,:,k) = ACC(fMF,i,:,:,k) - WCOL(:,:,k) * ACC(fAREA,i,:,:,k)
     end do
   end do
 
   ! zonal mean: global mean removed; wavenumber components: latitude-band mean removed
-  WNET = mean_w(sum(sum(real(ACCZ(1,:,:,:), dp), 1), 1), sum(sum(real(AREA_Y, dp), 1), 1))
+  WNET = mean_w(sum(sum(ACCZ(1,:,:,:), 1), 1), sum(sum(AREA_Y, 1), 1))
   do k = 1, NLEV
-    ACCZ(1,:,:,k) = ACCZ(1,:,:,k) - real(WNET(k)) * AREA_Y(:,:,k)
+    ACCZ(1,:,:,k) = ACCZ(1,:,:,k) - WNET(k) * AREA_Y(:,:,k)
   end do
   do n = 2, NFZ
-    WLAT = mean_w(sum(real(ACCZ(n,:,:,:), dp), 1), sum(real(AREA_Y, dp), 1))
+    WLAT = mean_w(sum(ACCZ(n,:,:,:), 1), sum(AREA_Y, 1))
     do i = 1, NBIN
-      ACCZ(n,i,:,:) = ACCZ(n,i,:,:) - real(WLAT) * AREA_Y(i,:,:)
+      ACCZ(n,i,:,:) = ACCZ(n,i,:,:) - WLAT * AREA_Y(i,:,:)
     end do
   end do
 
   ! streamfunctions: cumulative sums over theta_e
   allocate(STR_THE(NBIN, NLEV), STRZ_THE(NBIN, NLEV, NFZ))
-  STR_THE = real(cumsum(sum(sum(real(MFC_THE, dp), 2), 2)))
+  STR_THE = cumsum(sum(sum(MFC_THE, 2), 2))
   do n = 1, NFZ
-    STRZ_THE(:,:,n) = real(cumsum(sum(real(ACCZ(n,:,:,:), dp), 2)))
+    STRZ_THE(:,:,n) = cumsum(sum(ACCZ(n,:,:,:), 2))
   end do
 
   ! output
@@ -376,9 +376,9 @@ contains
   ! read levels level_start:nlev_file of input n at time istep
   subroutine read_level_field(n, field)
     integer, intent(in) :: n
-    real, intent(out) :: field(:,:,:)
+    real(dp), intent(out) :: field(:,:,:)
 
-    real :: scale, offset
+    real(dp) :: scale, offset
 
     call check(nf90_get_var(ncid(n), varid(n), field, [1, 1, level_start, istep], [NLON, NLAT, NLEV, 1]))
     call packing(ncid(n), varid(n), scale, offset)
@@ -388,10 +388,10 @@ contains
   ! scale_factor and add_offset of a packed variable (1 and 0 otherwise)
   subroutine packing(nc, id, scale, offset)
     integer, intent(in) :: nc, id
-    real, intent(out) :: scale, offset
+    real(dp), intent(out) :: scale, offset
 
-    if (nf90_get_att(nc, id, "scale_factor", scale) /= nf90_noerr) scale = 1.0
-    if (nf90_get_att(nc, id, "add_offset", offset) /= nf90_noerr) offset = 0.0
+    if (nf90_get_att(nc, id, "scale_factor", scale) /= nf90_noerr) scale = 1.0_dp
+    if (nf90_get_att(nc, id, "add_offset", offset) /= nf90_noerr) offset = 0.0_dp
   end subroutine packing
 
   elemental real(dp) function mean_w(mf, area)

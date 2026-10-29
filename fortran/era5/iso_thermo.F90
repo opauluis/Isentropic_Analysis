@@ -30,13 +30,13 @@ contains
 
   ! theta_e, entropy and enthalpy from specific humidities q (vapor), ql (liquid), qi (ice)
   elemental subroutine moist_thermo(theta_e, s, h, temp, q, ql, qi, p)
-    real, intent(out) :: theta_e, s, h
-    real, intent(in) :: temp, q, ql, qi, p
+    real(dp), intent(out) :: theta_e, s, h
+    real(dp), intent(in) :: temp, q, ql, qi, p
 
     real(dp) :: t, qt, e, es, pd, r, rl, ri, rt, cp, cp0, lv
 
     t = temp
-    qt = real(q, dp) + ql + qi
+    qt = q + ql + qi
     r = q / (1.0_dp - qt)
     rl = ql / (1.0_dp - qt)
     ri = qi / (1.0_dp - qt)
@@ -49,16 +49,16 @@ contains
     cp = CPAIR + (r + rl) * CL + ri * CI
     cp0 = CPAIR + rt * CL
 
-    s = real(cp * log(t / TREF) - RD * log(pd / PREF) + lv * r / t - LF0 * ri / TREF &
-         - RVAP * r * log(e / es))
-    theta_e = real(TREF * exp(s / cp0))
-    h = real(cp * (t - TREF) + lv * r - LF0 * ri)
+    s = cp * log(t / TREF) - RD * log(pd / PREF) + lv * r / t - LF0 * ri / TREF &
+         - RVAP * r * log(e / es)
+    theta_e = TREF * exp(s / cp0)
+    h = cp * (t - TREF) + lv * r - LF0 * ri
   end subroutine moist_thermo
 
   ! Saturation vapor pressure over liquid water (hPa), polynomial fit of Flatau et al. (1992),
   ! held constant below -80C
   elemental real(dp) function esat(t)
-    real, intent(in) :: t
+    real(dp), intent(in) :: t
     real(dp), parameter :: a0 = 6.11239921_dp, a1 = 0.443987641_dp, a2 = 0.142986287e-1_dp, &
          a3 = 0.264847430e-3_dp, a4 = 0.302950461e-5_dp, a5 = 0.206739458e-7_dp, &
          a6 = 0.640689451e-10_dp, a7 = -0.952447341e-13_dp, a8 = -0.976195544e-15_dp

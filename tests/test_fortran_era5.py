@@ -207,7 +207,7 @@ def test_matches_reference(run):
         if name in ("lat", "lon", "press"):
             continue
         scale = np.abs(r).max()
-        np.testing.assert_allclose(out[name], r, rtol=0, atol=2e-4 * scale, err_msg=name)
+        np.testing.assert_allclose(out[name], r, rtol=0, atol=1e-6 * scale, err_msg=name)
 
 
 def test_area_covers_sphere(run):
@@ -223,4 +223,4 @@ def test_column_mean_removed(run):
     out, _, _ = run
     mfc = out["MFCNV_THE"].sum(0)
     scale = np.abs(out["MFC_THE"]).sum(0).max()
-    assert np.abs(mfc).max() < 1e-4 * scale
+    assert np.abs(mfc).max() < 1e-6 * scale

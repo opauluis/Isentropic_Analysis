@@ -17,36 +17,36 @@ module zonal_filter
 contains
 
   function band_pass(w, k1, k2) result(wf)
-    real, intent(in) :: w(:)
+    real(dp), intent(in) :: w(:)
     integer, intent(in) :: k1, k2
-    real :: wf(size(w))
+    real(dp) :: wf(size(w))
 
+    ! cos/sin tables for wavenumbers 1 to k_tab, kept between calls
     real(dp), allocatable, save :: ctab(:,:), stab(:,:)
-    integer, save :: n_tab = 0, k1_tab = 0, k2_tab = 0
+    integer, save :: n_tab = 0, k_tab = 0
     real(dp) :: a, b, pi
     integer :: n, i, k
 
     n = size(w)
-    if (n /= n_tab .or. k1 /= k1_tab .or. k2 /= k2_tab) then
+    if (n /= n_tab .or. k2 > k_tab) then
       if (allocated(ctab)) deallocate(ctab, stab)
-      allocate(ctab(n, k1:k2), stab(n, k1:k2))
+      k_tab = max(k2, k_tab)
+      allocate(ctab(n, k_tab), stab(n, k_tab))
       pi = 4.0_dp * atan(1.0_dp)
-      do k = k1, k2
+      do k = 1, k_tab
         do i = 1, n
           ctab(i, k) = cos(2.0_dp * pi * k * (i - 1) / n)
           stab(i, k) = sin(2.0_dp * pi * k * (i - 1) / n)
         end do
       end do
       n_tab = n
-      k1_tab = k1
-      k2_tab = k2
     end if
 
-    wf = 0.0
+    wf = 0.0_dp
     do k = k1, k2
-      a = 2.0_dp / n * dot_product(real(w, dp), ctab(:, k))
-      b = 2.0_dp / n * dot_product(real(w, dp), stab(:, k))
-      wf = wf + real(a * ctab(:, k) + b * stab(:, k))
+      a = 2.0_dp / n * dot_product(w, ctab(:, k))
+      b = 2.0_dp / n * dot_product(w, stab(:, k))
+      wf = wf + a * ctab(:, k) + b * stab(:, k)
     end do
   end function band_pass
 
