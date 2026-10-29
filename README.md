@@ -30,10 +30,16 @@ python -m ipykernel install --user --name iso --display-name "Python (iso)"
   isentropic distribution `<f>` (Eq. 1), streamfunction `Psi(z, theta_e)` (Eq. 3), conditional
   means, diabatic tendency `<rho dtheta_e/dt> = -dPsi/dz` and its isentropic mean (Eq. 10),
   and the two-stream mean ascent/descent `M_up`, `M_down`, `f_up`, `f_down` (Eqs. 14-17).
+- `isentropic/sam.py`: SAM 3D output to mass flux, theta_e and frozen theta_e, cloud mask
+  (QN > 0.01 g/kg), and the conditional sums in both coordinates.
+- `scripts/sam_iso_integrals.py`: conditional sums of every snapshot of a SAM run, written to
+  one netCDF file (`scripts/sam_iso_integrals.sbatch` runs it on Torch). The diagnostics are
+  made from these files by `notebooks/isentropic_diagnostics.ipynb`.
 - `scripts/cloud_botany_iso.py`: isentropic binning of one member/time of the Cloud Botany
   DALES ensemble (EUREC4A intake catalog).
 
 ```
+python scripts/sam_iso_integrals.py RUN_DIR RUN_NAME [-o OUTPUT] [--times START:STOP:STEP]
 python scripts/cloud_botany_iso.py MEMBER TIME [SAVE_DIR]
 ```
 
