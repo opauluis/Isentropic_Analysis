@@ -14,7 +14,9 @@ theta_l and q_t, assuming the parcel is unsaturated there. The density is DALES'
 taken at the same time as the 3D snapshot. A field with NaNs is read again (Zarr turns a chunk it
 fails to fetch into NaNs); NaNs found at the same points in two reads are taken as data and those
 points are left out of the sums. A time that cannot be read consistently is skipped and reported,
-and the job exits with an error so that resubmitting it redoes that time. Values outside the theta_e bins are put in the first/last bin (see isentropic.binning).
+and the job exits with an error so that resubmitting it redoes that time.
+Every read is logged in SAVE_DIR/EXP_<member>/nan_log.csv (member, time, field, attempt, number of
+NaNs, status), and each output file has NAN_COUNT, READS and NAN_DISCARDED per field. Values outside the theta_e bins are put in the first/last bin (see isentropic.binning).
 
 Runs 7, 15, 38, 39 and 47 crashed and runs 11, 14, 43, 46 and 87 end after 48 h (Jansson et al.
 2023, JAMES, doi:10.1029/2023MS003796, Sec. 6.4): the crashed runs are refused unless --force is
@@ -38,6 +40,7 @@ from isentropic import thermo
 
 CATALOG = "https://raw.githubusercontent.com/eurec4a/eurec4a-intake/master/catalog.yml"
 CRASHED = {7, 15, 38, 39, 47}
+FIELDS = ("thl", "qt", "ql", "qr", "w")
 P_REF = 1.0e5
 
 
@@ -65,31 +68,37 @@ class ReadError(RuntimeError):
     pass
 
 
-def load_field(entry, name, sel, retries, backoff=2.0):
+def load_field(entry, name, sel, retries, log, backoff=2.0):
     """One 3D field as a numpy array (z, y, x), or None if the snapshot has no data.
 
     Zarr fills a chunk that it fails to fetch from Swift with NaNs instead of raising, so NaNs
     may be a dropped read rather than data. A field with NaNs is read again, and its NaNs are
     accepted only when they are at the same points in two consecutive reads; they are then
     masked out of the sums. A field that is NaN everywhere in two reads has no data (run ended).
+    Every read is passed to log(attempt, nnan, status), with nnan = -1 for a read error.
     """
     previous = None
     for attempt in range(1, retries + 1):
         try:
             a = entry.to_dask()[name].sel(sel).values
             nan = np.isnan(a)
-            nnan = nan.sum()
+            nnan = int(nan.sum())
             if nnan == 0:
+                log(attempt, 0, "ok")
                 return a
             if previous is not None and np.array_equal(nan, previous):
                 if nnan == a.size:
+                    log(attempt, nnan, "no_data")
                     print(f"  {name}: no data")
                     return None
+                log(attempt, nnan, "masked")
                 print(f"  {name}: {nnan} NaNs at the same points in two reads, masked")
                 return a
+            log(attempt, nnan, "retry")
             print(f"  {name}: {nnan} NaNs on attempt {attempt}/{retries}, reading again")
             previous = nan
         except Exception as err:
+            log(attempt, -1, "error")
             print(f"  {name}: read error on attempt {attempt}/{retries}: {err}")
             previous = None
         if attempt < retries:
@@ -135,6 +144,9 @@ def main():
     times = parse_times(args.times, ds3d.sizes["time"])
     out_dir = args.save_dir / f"EXP_{args.member:03d}"
     out_dir.mkdir(parents=True, exist_ok=True)
+    nan_log = out_dir / "nan_log.csv"
+    if not nan_log.exists():
+        nan_log.write_text("member,time_index,time,field,attempt,nnan,status\n")
     print(f"member {args.member} ({args.domain}), {len(times)} times, output in {out_dir}")
 
     failed = []
@@ -148,9 +160,14 @@ def main():
         sel = dict(member=args.member, time=t)
         print(f"time {it} ({t}): reading")
         fields = {}
+        reads = {name: [] for name in FIELDS}  # (attempt, nnan, status) of every read
         try:
-            for name in ("thl", "qt", "ql", "qr", "w"):
-                fields[name] = load_field(entry3d, name, sel, args.retries)
+            for name in FIELDS:
+                def log(attempt, nnan, status, name=name):
+                    reads[name].append((attempt, nnan, status))
+                    with open(nan_log, "a") as f:
+                        f.write(f"{args.member},{it},{t},{name},{attempt},{nnan},{status}\n")
+                fields[name] = load_field(entry3d, name, sel, args.retries, log)
                 if fields[name] is None:
                     break
         except ReadError as err:
@@ -182,6 +199,14 @@ def main():
         }
         for n, (long_name, units) in attrs.items():
             ds[n].attrs.update(long_name=long_name, units=units)
+        # NaN bookkeeping per field: NaNs kept (and masked), reads needed, NaNs in the discarded reads
+        ds["NAN_COUNT"] = (("time", "field"), [[r[-1][1] for r in reads.values()]])
+        ds["READS"] = (("time", "field"), [[len(r) for r in reads.values()]])
+        ds["NAN_DISCARDED"] = (("time", "field"), [[sum(n for _, n, s in r if s == "retry") for r in reads.values()]])
+        ds = ds.assign_coords(field=list(FIELDS))
+        ds["NAN_COUNT"].attrs.update(long_name="NaNs in the field as read (same points in two reads), masked")
+        ds["READS"].attrs.update(long_name="reads of the field from Swift needed")
+        ds["NAN_DISCARDED"].attrs.update(long_name="NaNs in the reads that were discarded and read again (dropped chunks)")
         ds["height"].attrs.update(long_name="height of the full levels zt", units="m")
         ds["theta_e"].attrs.update(long_name="equivalent potential temperature at 1000 hPa (bin centers)", units="K")
         ds.attrs.update(member=args.member, domain=args.domain, time_index=it, cell_area=area_cell,
