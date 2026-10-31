@@ -35,12 +35,13 @@ python -m ipykernel install --user --name iso --display-name "Python (iso)"
 - `scripts/sam_iso_integrals.py`: conditional sums of every snapshot of a SAM run, written to
   one netCDF file (`scripts/sam_iso_integrals.sbatch` runs it on Torch). The diagnostics are
   made from these files by `notebooks/isentropic_diagnostics.ipynb`.
-- `scripts/cloud_botany_iso.py`: isentropic binning of one member/time of the Cloud Botany
-  DALES ensemble (EUREC4A intake catalog).
+- `scripts/cloud_botany_iso.py`: isentropic binning of the hourly 3D output of one Cloud Botany
+  DALES member (EUREC4A intake catalog), one file per time; `scripts/cloud_botany_iso.sbatch`
+  runs it on Levante as a job array over the members.
 
 ```
 python scripts/sam_iso_integrals.py RUN_DIR RUN_NAME [-o OUTPUT] [--times START:STOP:STEP]
-python scripts/cloud_botany_iso.py MEMBER TIME [SAVE_DIR]
+python scripts/cloud_botany_iso.py MEMBER [TIMES] [SAVE_DIR]
 ```
 
 - `fortran/era5/`: Fortran program for the daily isentropic analysis of ERA5 on pressure
@@ -53,12 +54,12 @@ import numpy as np
 import xarray as xr
 import isentropic as iso
 
-ds = xr.open_mfdataset('CB_ISO_EXP_001_TIME_*.nc')   # output of scripts/cloud_botany_iso.py
+ds = xr.open_mfdataset('EXP_001/CB_ISO_EXP_001_TIME_*.nc')   # output of scripts/cloud_botany_iso.py
 area = ds.AREA.sum('time').values                    # sum over times = time average
 mf = ds.MF.sum('time').values
 z = ds.height.values
 
-psi = iso.streamfunction(mf, area)                   # kg m-2 s-1
+psi = iso.streamfunction(mf, area)                   # kg m-2 s-1 (MF in kg s-1, AREA in m2)
 the_mean = iso.conditional_mean(ds.ATHE.sum('time').values, area)
 ts = iso.two_stream(mf, area, {'qt': ds.RHOWQT.sum('time').values})
 ```
