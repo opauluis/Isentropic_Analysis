@@ -11,8 +11,10 @@ already exists are skipped, so a job that stopped can be resubmitted as is.
 The data is read from the DKRZ Swift object store through the EUREC4A intake catalog (needs
 intake, intake-xarray, jinja2, zarr and aiohttp). theta_e is computed at p_ref = 1000 hPa from
 theta_l and q_t, assuming the parcel is unsaturated there. The density is DALES' base state rhobf,
-taken at the same time as the 3D snapshot. Points where theta_e, w, q_l or q_r are not finite are
-left out. Values outside the theta_e bins are put in the first/last bin (see isentropic.binning).
+taken at the same time as the 3D snapshot. A field with NaNs is read again (Zarr turns a chunk it
+fails to fetch into NaNs); NaNs found at the same points in two reads are taken as data and those
+points are left out of the sums. A time that cannot be read consistently is skipped and reported,
+and the job exits with an error so that resubmitting it redoes that time. Values outside the theta_e bins are put in the first/last bin (see isentropic.binning).
 
 Runs 7, 15, 38, 39 and 47 crashed and runs 11, 14, 43, 46 and 87 end after 48 h (Jansson et al.
 2023, JAMES, doi:10.1029/2023MS003796, Sec. 6.4): the crashed runs are refused unless --force is
@@ -59,30 +61,40 @@ def parse_times(s, nt):
     return list(range(nt))[slice(*(int(v) if v else None for v in s.split(":")))]
 
 
+class ReadError(RuntimeError):
+    pass
+
+
 def load_field(entry, name, sel, retries, backoff=2.0):
     """One 3D field as a numpy array (z, y, x), or None if the snapshot has no data.
 
-    Reading from Swift sometimes drops chunks, which shows up as NaNs: the dataset is then
-    reopened and read again. A field that is entirely NaN is missing (run ended), not dropped.
+    Zarr fills a chunk that it fails to fetch from Swift with NaNs instead of raising, so NaNs
+    may be a dropped read rather than data. A field with NaNs is read again, and its NaNs are
+    accepted only when they are at the same points in two consecutive reads; they are then
+    masked out of the sums. A field that is NaN everywhere in two reads has no data (run ended).
     """
+    previous = None
     for attempt in range(1, retries + 1):
         try:
             a = entry.to_dask()[name].sel(sel).values
-            nnan = np.isnan(a).sum()
-            if nnan == a.size:
-                print(f"  {name}: no data")
-                return None
-            # qt tolerates a few NaNs, and ql/qr any; the points are masked out later
-            if nnan == 0 or name in ("ql", "qr") or (name == "qt" and nnan <= 100):
-                if nnan:
-                    print(f"  {name}: {nnan} NaNs, masked")
+            nan = np.isnan(a)
+            nnan = nan.sum()
+            if nnan == 0:
                 return a
-            print(f"  {name}: {nnan} NaNs on attempt {attempt}/{retries}")
+            if previous is not None and np.array_equal(nan, previous):
+                if nnan == a.size:
+                    print(f"  {name}: no data")
+                    return None
+                print(f"  {name}: {nnan} NaNs at the same points in two reads, masked")
+                return a
+            print(f"  {name}: {nnan} NaNs on attempt {attempt}/{retries}, reading again")
+            previous = nan
         except Exception as err:
             print(f"  {name}: read error on attempt {attempt}/{retries}: {err}")
+            previous = None
         if attempt < retries:
             clock.sleep(backoff ** attempt)
-    raise RuntimeError(f"no valid '{name}' after {retries} attempts")
+    raise ReadError(f"no consistent '{name}' after {retries} attempts")
 
 
 def iso_sums(thl, qt, ql, qr, w, rho, area_cell, bins):
@@ -125,6 +137,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"member {args.member} ({args.domain}), {len(times)} times, output in {out_dir}")
 
+    failed = []
     for it in times:
         out_file = out_dir / f"CB_ISO_EXP_{args.member:03d}_TIME_{it:02d}.nc"
         if out_file.exists():
@@ -135,10 +148,15 @@ def main():
         sel = dict(member=args.member, time=t)
         print(f"time {it} ({t}): reading")
         fields = {}
-        for name in ("thl", "qt", "ql", "qr", "w"):
-            fields[name] = load_field(entry3d, name, sel, args.retries)
-            if fields[name] is None:
-                break
+        try:
+            for name in ("thl", "qt", "ql", "qr", "w"):
+                fields[name] = load_field(entry3d, name, sel, args.retries)
+                if fields[name] is None:
+                    break
+        except ReadError as err:
+            print(f"time {it}: {err}; skipped, it is done again when the job is resubmitted")
+            failed.append(it)
+            continue
         if any(f is None for f in fields.values()):
             print(f"time {it}: no data, skipped")
             continue
@@ -174,6 +192,8 @@ def main():
         ds.to_netcdf(out_file)
         print(f"time {it}: wrote {out_file.name} in {clock.time() - t0:.0f} s, "
               f"{nmask} points masked, {100 * edge:.3f}% of the area in the edge bins")
+    if failed:
+        raise SystemExit(f"times {failed} could not be read consistently; resubmit to redo them")
 
 
 if __name__ == "__main__":
