@@ -1,13 +1,13 @@
 #!/bin/bash
 # Isentropic integrals of the Cloud Botany ensemble on Levante, one array task per member.
-#   sbatch scripts/cloud_botany_iso.sbatch              # all members that did not crash
-#   sbatch --array=0 scripts/cloud_botany_iso.sbatch    # member 1 only, as a first test
+# Levante needs a project account, given on the command line:
+#   sbatch --account=<project> scripts/cloud_botany_iso.sbatch              # all members that did not crash
+#   sbatch --account=<project> --array=0 scripts/cloud_botany_iso.sbatch    # member 1 only, as a first test
 # Output: $OUT/EXP_<member>/CB_ISO_EXP_<member>_TIME_<time>.nc; a resubmitted task skips the
 # times already written. Members 7, 15, 38, 39 and 47 crashed and are left out of MEMBERS.
 # Sized on member 1 (2026-10-31): 60 snapshots in 2 h 24 min, peak RSS 9.6 GB.
 #SBATCH --job-name=cb_iso
 #SBATCH --partition=shared
-#SBATCH --account=mh1569
 #SBATCH --array=0-97%4
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2

@@ -15,7 +15,7 @@ HIST_JOINT(theta_e, theta_ef) is the joint distribution of the two coordinates s
 processed snapshots. Read the output with notebooks/isentropic_diagnostics.ipynb.
 
 Example (every 4th snapshot):
-    python sam_iso_integrals.py /scratch/op13/SAM-Torch/RCE_REF RCE_REF_300K --times ::4
+    python sam_iso_integrals.py /scratch/$USER/SAM-Torch/RCE_REF RCE_REF_300K --times ::4
 """
 
 import argparse

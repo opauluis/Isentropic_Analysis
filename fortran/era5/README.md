@@ -22,7 +22,7 @@ make FC=ifx                  # or: make  (gfortran)
 ```
 
 Output goes to `OUT_DIR/YYYY/ERA5_STR_THE.YYYY_MM_DD.nc` (netCDF-4, deflated), with
-`OUT_DIR` defaulting to `/glade/derecho/scratch/pauluis/ERA5/ISO/THETAE/`. The input
+`OUT_DIR` defaulting to the current directory. The input
 locations default to the Casper RDA paths and can be changed with the environment variables
 `ERA5_PL_DIR` (directory holding the `YYYYMM/e5.oper.an.pl.*` files) and `ERA5_ZS_FILE`
 (surface geopotential). Grid sizes, levels and number of hours are read from the files.
@@ -35,13 +35,14 @@ about 6 GB and 2 min):
 
 ```
 cd fortran/era5
-qsub -v YEAR=2020 era5_iso_year.pbs
-qsub -v YEAR=2020,OUT_DIR=/path/to/out era5_iso_year.pbs   # other output directory
+qsub -A <project> -v YEAR=2020 era5_iso_year.pbs
+qsub -A <project> -v YEAR=2020,OUT_DIR=/path/to/out era5_iso_year.pbs   # other output directory
 qstat -u $USER                                              # progress (array shows as 1234567[])
 ```
 
 Days with a readable output file are skipped, so resubmitting the same command reruns only the
-days that failed (`FORCE=1` reruns all). Change `#PBS -A` in the script for another project code.
+days that failed (`FORCE=1` reruns all). `<project>` is your NCAR project code; the default
+`OUT_DIR` is `/glade/derecho/scratch/$USER/ERA5/ISO/THETAE`.
 
 ## Output
 

@@ -26,7 +26,7 @@ program era5_iso
   character(len=*), parameter :: DIR_ERA5_DEFAULT = "/glade/campaign/collections/rda/data/d633000/e5.oper.an.pl/"
   character(len=*), parameter :: FILE_ZS_DEFAULT = "/glade/campaign/collections/rda/data/d633000/" // &
        "e5.oper.invariant/197901/e5.oper.invariant.128_129_z.ll025sc.1979010100_1979010100.nc"
-  character(len=*), parameter :: DIR_OUT_DEFAULT = "/glade/derecho/scratch/pauluis/ERA5/ISO/THETAE/"
+  character(len=*), parameter :: DIR_OUT_DEFAULT = "./"
   character(len=*), parameter :: FILE_OUT = "ERA5_STR_THE."
 
   ! theta_e bins
