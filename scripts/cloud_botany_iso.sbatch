@@ -4,14 +4,15 @@
 #   sbatch --array=0 scripts/cloud_botany_iso.sbatch    # member 1 only, as a first test
 # Output: $OUT/EXP_<member>/CB_ISO_EXP_<member>_TIME_<time>.nc; a resubmitted task skips the
 # times already written. Members 7, 15, 38, 39 and 47 crashed and are left out of MEMBERS.
+# Sized on member 1 (2026-10-31): 60 snapshots in 2 h 24 min, peak RSS 9.6 GB.
 #SBATCH --job-name=cb_iso
 #SBATCH --partition=shared
 #SBATCH --account=mh1569
 #SBATCH --array=0-97%4
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=16G
-#SBATCH --time=08:00:00
+#SBATCH --mem=12G
+#SBATCH --time=04:00:00
 #SBATCH --output=cb_iso_%A_%a.log
 
 set -euo pipefail
