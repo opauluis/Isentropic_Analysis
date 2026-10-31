@@ -24,4 +24,4 @@ micromamba activate analysis
 export PYTHONPATH=$REPO${PYTHONPATH:+:$PYTHONPATH}
 python -c "import intake, intake_xarray, jinja2, zarr, aiohttp"  # fail early if a reader is missing
 
-python "$REPO/scripts/cloud_botany_iso.py" "${MEMBERS[$SLURM_ARRAY_TASK_ID]}" :: "$OUT"
+python -u "$REPO/scripts/cloud_botany_iso.py" "${MEMBERS[$SLURM_ARRAY_TASK_ID]}" :: "$OUT"
