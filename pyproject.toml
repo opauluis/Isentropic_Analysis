@@ -13,7 +13,7 @@ dependencies = ["numpy"]
 [project.optional-dependencies]
 io = ["xarray", "netcdf4", "dask", "intake"]
 test = ["pytest"]
-notebook = ["jupyterlab", "ipykernel", "matplotlib"]
+notebook = ["jupyterlab", "ipykernel", "matplotlib", "nbstripout"]
 
 [tool.setuptools]
 packages = ["isentropic"]
