@@ -1,0 +1,5 @@
+# Notebooks: strip outputs and execution counts when git reads them, so running a notebook
+# does not show up as a change or block a pull. Needs a one-time `nbstripout --install` in each
+# clone (see README); without it this line has no effect.
+*.ipynb filter=nbstripout
+*.ipynb diff=ipynb

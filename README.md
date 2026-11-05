@@ -18,6 +18,21 @@ To use the environment from a shared Jupyter (e.g. Open OnDemand), register it a
 python -m ipykernel install --user --name iso --display-name "Python (iso)"
 ```
 
+## Notebooks and git
+
+Notebooks are committed without outputs. To keep running a notebook from showing up in
+`git status` or blocking `git pull`, set up the nbstripout filter once in each clone:
+
+```
+pip install nbstripout          # into the venv you run Jupyter from
+nbstripout --install            # in the repository root; writes .git/config only
+```
+
+`.gitattributes` applies the filter to `*.ipynb`. Git then reads notebooks with outputs
+and execution counts removed, so you can run them freely. A pull that changes a notebook
+replaces your copy, outputs included; to keep results, save them under another name
+outside the repository first.
+
 ## Contents
 
 - `isentropic/thermo.py`: thermodynamic constants and functions (saturation vapor pressure,
