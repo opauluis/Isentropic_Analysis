@@ -55,6 +55,9 @@ outside the repository first.
   runs it on Levante as a job array over the members.
   `notebooks/cloud_botany_nan_check.ipynb` reads the `nan_log.csv` files it writes: which
   snapshots are done or must be redone, and how often reads from Swift were dropped.
+  `scripts/cloud_botany_nan_report.py` lists the blocks of missing data from those logs, and
+  `scripts/cloud_botany_find_chunks.py` names the Zarr chunk objects behind them that Swift
+  lists but cannot serve; `scripts/cloud_botany_find_chunks.sbatch` runs both over all members.
 
 ```
 python scripts/sam_iso_integrals.py RUN_DIR RUN_NAME [-o OUTPUT] [--times START:STOP:STEP]
