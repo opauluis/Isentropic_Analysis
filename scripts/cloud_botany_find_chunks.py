@@ -1,15 +1,15 @@
 """Name the Zarr chunk objects behind the missing-data blocks of nan_report.csv, and check them on Swift.
 
 For each block (member, field, time chunk) it builds the key of every chunk covering that member
-and time chunk, sends a HEAD request for each, and prints the keys that return 404. When the chunks
-all exist, the NaNs are stored in the data: the script then downloads and decodes the --decode
-smallest objects of the block (a chunk of NaN compresses far better than one of model output) and
-prints their NaN counts, which names the chunks that hold the NaNs.
+and time chunk, sends a HEAD request for each, and prints the keys that return 404. It then
+downloads and decodes every chunk of the block at the levels with missing points (the heights_m
+column of the report, or --zchunks) and prints those that fail to download or decode, or that hold
+NaN inside the array (the padding of edge chunks is left out of the count).
 
-    python scripts/cloud_botany_find_chunks.py [NAN_REPORT] [--members 1,11] [--max-blocks 5] [--decode 3]
+    python scripts/cloud_botany_find_chunks.py [NAN_REPORT] [--members 1,11] [--max-blocks 5] [--zchunks 5,6]
 
-One HEAD per chunk (about 700 per block), 16 at a time, plus a few chunk downloads of a few MB:
-light enough for a login node.
+About 700 HEADs and 36-72 chunk downloads of about 8 MB per block, 4 at a time: a few hundred MB
+per block, so run more than a few blocks in a batch job rather than on a login node.
 """
 import argparse
 import getpass
@@ -39,10 +39,20 @@ def head(url):
         return err.code, -1
 
 
+def valid(a, idx, chunks, shape):
+    """The part of an edge chunk that lies inside the array."""
+    return a[tuple(slice(0, min(c, n - i * c)) for i, c, n in zip(idx, chunks, shape))]
+
+
 def decode(url, zarray):
     """Download one Zarr v2 chunk and return it as an array."""
     raw = urllib.request.urlopen(url, timeout=120).read()
-    if zarray.get("compressor"):
+    comp = zarray.get("compressor") or {}
+    if comp.get("id") == "blosc":  # blosc can crash on a truncated buffer: check its header first
+        nbytes, cbytes = np.frombuffer(raw[4:16], "<u4")[[0, 2]] if len(raw) >= 16 else (0, -1)
+        if cbytes != len(raw):
+            raise ValueError(f"blosc header says {cbytes} compressed bytes, object has {len(raw)}")
+    if comp:
         raw = numcodecs.get_codec(zarray["compressor"]).decode(raw)
     for f in reversed(zarray.get("filters") or []):
         raw = numcodecs.get_codec(f).decode(raw)
@@ -56,7 +66,8 @@ def main():
                    default=Path(f"/scratch/{user[0]}/{user}/ISO/Cloud_Botany/nan_report.csv"))
     p.add_argument("--members", default=None, help="comma-separated members to check (default: all)")
     p.add_argument("--max-blocks", type=int, default=5, help="blocks to check, in report order")
-    p.add_argument("--decode", type=int, default=3, help="smallest chunks of each block to decode")
+    p.add_argument("--zchunks", default=None,
+                   help="comma-separated z-chunk indices to decode (default: from the heights_m column)")
     p.add_argument("--out", type=Path, default=None, help="CSV of the keys checked (default: next to the report)")
     p.add_argument("--store", default=STORE, help="Zarr store URL (default: the Botany nx1536 3D store)")
     args = p.parse_args()
@@ -71,7 +82,7 @@ def main():
         blocks = blocks[blocks.member.isin([int(m) for m in args.members.split(",")])]
     blocks = blocks.head(args.max_blocks)
     rows = []
-    with ThreadPoolExecutor(16) as pool:
+    with ThreadPoolExecutor(16) as pool, ThreadPoolExecutor(4) as getpool:
         for b in blocks.itertuples():
             zarray, zattrs = meta[f"{b.field}/.zarray"], meta[f"{b.field}/.zattrs"]
             dims, chunks, shape = zattrs["_ARRAY_DIMENSIONS"], zarray["chunks"], zarray["shape"]
@@ -89,17 +100,36 @@ def main():
                 print(f"  {store}/{k}")
             if len(missing) > 10:
                 print(f"  ... {len(missing) - 10} more")
-            nnan = {}
-            present = [(n, k) for k, c, n in zip(keys, codes, sizes) if c == 200 and n >= 0]
-            if present:
-                med = np.median([n for n, _ in present])
-                print(f"  median object size {med / 1e6:.2f} MB; smallest:")
-                for n, k in sorted(present)[:args.decode]:
-                    a = decode(f"{store}/{k}", zarray)
-                    nnan[k] = int(np.isnan(a).sum())
-                    print(f"  {store}/{k}  {n / 1e6:.3f} MB, {nnan[k]} of {a.size} NaN")
+            zdim = next(d for d in dims if d.startswith("z"))
+            iz = dims.index(zdim)
+            if args.zchunks:
+                zc = {int(z) for z in args.zchunks.split(",")}
+            elif isinstance(getattr(b, "heights_m", None), str) and "-" in b.heights_m:
+                lo, hi = map(float, b.heights_m.split("-"))
+                z = ds[zdim].values
+                zc = {int(i) // chunks[iz] for i in np.flatnonzero((z >= lo - 50) & (z <= hi + 50))}
+            else:
+                zc = set()
+                print("  no heights for this block; pass --zchunks to decode it")
+            todo = [(k, idx) for k, idx, c in zip(keys, itertools.product(*ranges), codes)
+                    if c == 200 and idx[iz] in zc]
+
+            def scan(item):
+                k, idx = item
+                try:
+                    return int(np.isnan(valid(decode(f"{store}/{k}", zarray), idx, chunks, shape)).sum()), ""
+                except Exception as err:  # report any download or decode failure
+                    return -1, repr(err)[:200]
+
+            result = dict(zip((k for k, _ in todo), getpool.map(scan, todo)))
+            bad = {k: r for k, r in result.items() if r[0] != 0}
+            print(f"  decoded {len(result)} chunks at z-chunks {sorted(zc)}: {len(bad)} with NaN or errors")
+            for k, (n, err) in sorted(bad.items()):
+                print(f"  {store}/{k}  " + (f"ERROR {err}" if err else f"{n} NaN"))
+            nnan = {k: r[0] for k, r in result.items()}
+            errors = {k: r[1] for k, r in result.items() if r[1]}
             rows += [dict(member=b.member, field=b.field, first_index=b.first_index, key=k, http=c, bytes=n,
-                          nnan=nnan.get(k, "")) for k, c, n in zip(keys, codes, sizes)]
+                          nnan=nnan.get(k, ""), error=errors.get(k, "")) for k, c, n in zip(keys, codes, sizes)]
     out = args.out or args.report.with_name("missing_chunks.csv")
     pd.DataFrame(rows).to_csv(out, index=False)
     print(f"dims {dims}, chunks {chunks}; all keys checked in {out}")
