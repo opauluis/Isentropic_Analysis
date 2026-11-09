@@ -4,7 +4,7 @@ For each block (member, field, time chunk) it builds the key of every chunk cove
 and time chunk, sends a HEAD request for each, and prints the keys that return 404. A block whose
 chunks all exist holds NaN in the data itself rather than missing objects.
 
-    python scripts/cloud_botany_find_chunks.py [NAN_REPORT] [--max-blocks 5] [--out missing_chunks.csv]
+    python scripts/cloud_botany_find_chunks.py [NAN_REPORT] [--members 1,11] [--max-blocks 5] [--out missing_chunks.csv]
 
 One HEAD per chunk (792 per block for the 3D fields), 16 at a time: light enough for a login node.
 """
@@ -39,6 +39,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("report", nargs="?", type=Path,
                    default=Path(f"/scratch/{user[0]}/{user}/ISO/Cloud_Botany/nan_report.csv"))
+    p.add_argument("--members", default=None, help="comma-separated members to check (default: all)")
     p.add_argument("--max-blocks", type=int, default=5, help="blocks to check, in report order")
     p.add_argument("--out", type=Path, default=None, help="CSV of the keys checked (default: next to the report)")
     p.add_argument("--store", default=STORE, help="Zarr store URL (default: the Botany nx1536 3D store)")
@@ -49,7 +50,10 @@ def main():
     ds = xr.open_zarr(store, consolidated=True)
     members = ds["member"].values if "member" in ds.coords else np.arange(1, ds.sizes["member"] + 1)
 
-    blocks = pd.read_csv(args.report).head(args.max_blocks)
+    blocks = pd.read_csv(args.report)
+    if args.members:
+        blocks = blocks[blocks.member.isin([int(m) for m in args.members.split(",")])]
+    blocks = blocks.head(args.max_blocks)
     rows = []
     with ThreadPoolExecutor(16) as pool:
         for b in blocks.itertuples():
