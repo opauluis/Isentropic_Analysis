@@ -2,14 +2,18 @@
 
 Usage:
     python cloud_botany_iso.py MEMBER [TIMES] [SAVE_DIR] [--domain nx1536] [--theta-e-bins 300,350,101]
+        [--refs URL]
 
-MEMBER is the ensemble member (1-103). TIMES is one index or a Python slice START:STOP:STEP of the
-hourly 3D output (60 times, 2020-02-01 01:00 to 2020-02-03 12:00); the default is all of them.
+MEMBER is the ensemble member (1-103). TIMES is one index, a comma list, or a Python slice
+START:STOP:STEP of the hourly 3D output (60 times, 2020-02-01 01:00 to 2020-02-03 12:00); the default is all of them.
 Each time is written to SAVE_DIR/EXP_<member>/CB_ISO_EXP_<member>_TIME_<time>.nc; times whose file
 already exists are skipped, so a job that stopped can be resubmitted as is.
 
 The data is read from the DKRZ Swift object store through the EUREC4A intake catalog (needs
-intake, intake-xarray, jinja2, zarr and aiohttp). theta_e is computed at p_ref = 1000 hPa from
+intake, intake-xarray, jinja2, zarr and aiohttp). With --refs the 3D fields are read instead
+through an fsspec reference file in parquet (tarred), such as the one DKRZ made in November 2026
+that points the unreadable chunks of the original store to re-created copies (also needs
+pyarrow); the profiles still come from the catalog. theta_e is computed at p_ref = 1000 hPa from
 theta_l and q_t, assuming the parcel is unsaturated there. The density is DALES' base state rhobf,
 taken at the same time as the 3D snapshot. A field with NaNs is read again (Zarr turns a chunk it
 fails to fetch into NaNs); NaNs found at the same points in two reads are taken as data and those
@@ -42,12 +46,15 @@ CATALOG = "https://raw.githubusercontent.com/eurec4a/eurec4a-intake/master/catal
 CRASHED = {7, 15, 38, 39, 47}
 FIELDS = ("thl", "qt", "ql", "qr", "w")
 P_REF = 1.0e5
+REFS_FIXED = ("https://swift.dkrz.de/v1/dkrz_b42c6bc6-439f-4efb-9491-db3de70ad9ba/"
+              "botany_1536_3D_missingchunks/botany_1536_3D.refs.parq.tar")  # DKRZ, Nov 2026
 
 
 def parse_args():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("member", type=int, help="ensemble member, 1-103")
-    ap.add_argument("times", nargs="?", default="::", help="hourly 3D time index, or slice START:STOP:STEP")
+    ap.add_argument("times", nargs="?", default="::",
+                    help="hourly 3D time index, comma list, or slice START:STOP:STEP")
     user = getpass.getuser()
     ap.add_argument("save_dir", nargs="?", type=Path, default=Path(f"/scratch/{user[0]}/{user}/ISO/Cloud_Botany"),
                     help="output directory (default: /scratch/<u>/$USER/ISO/Cloud_Botany)")
@@ -55,17 +62,39 @@ def parse_args():
     ap.add_argument("--theta-e-bins", default="300,350,101", help="th_min,th_max,nbin (K)")
     ap.add_argument("--retries", type=int, default=5, help="attempts to read each field from Swift")
     ap.add_argument("--force", action="store_true", help="process a member that crashed")
+    ap.add_argument("--refs", nargs="?", const=REFS_FIXED, default=None,
+                    help="read the 3D fields through this fsspec reference file (parquet in a tar) "
+                         "instead of the catalog; without a value, DKRZ's file with the re-created chunks")
     return ap.parse_args()
 
 
 def parse_times(s, nt):
     if ":" not in s:
-        return [int(s)]
+        return [int(v) for v in s.split(",")]
     return list(range(nt))[slice(*(int(v) if v else None for v in s.split(":")))]
 
 
 class ReadError(RuntimeError):
     pass
+
+
+class RefsEntry:
+    """Stands in for the catalog's 3D entry: to_dask() opens the store through a reference file."""
+
+    def __init__(self, url, remote_protocol="https"):
+        self.url, self.remote_protocol = url, remote_protocol
+
+    def to_dask(self):
+        import fsspec
+        from fsspec.implementations.reference import LazyReferenceMapper
+
+        name = Path(self.url).name.removesuffix(".tar")
+        fo = LazyReferenceMapper(name, fs=fsspec.filesystem("tar", fo=self.url), engine="pyarrow")
+        return xr.open_dataset(
+            "reference://", engine="zarr", chunks={},
+            backend_kwargs=dict(consolidated=False, storage_options=dict(
+                fo=fo, remote_protocol=self.remote_protocol, asynchronous=True,
+                remote_options=dict(asynchronous=True))))
 
 
 def load_field(entry, name, sel, retries, log, backoff=2.0):
@@ -135,7 +164,7 @@ def main():
         raise SystemExit(f"member {args.member} crashed (Jansson et al. 2023, Sec. 6.4); use --force to run it")
 
     cat = intake.open_catalog(CATALOG).simulations.DALES.botany.dx100m[args.domain]
-    entry3d = cat["3D"]
+    entry3d = RefsEntry(args.refs) if args.refs else cat["3D"]
     ds3d = entry3d.to_dask().sel(member=args.member)
     rhobf = cat["profiles"].to_dask()["rhobf"].sel(member=args.member)
     nz = ds3d.sizes["zt"] - 1  # w is needed on the level above
@@ -210,7 +239,7 @@ def main():
         ds["height"].attrs.update(long_name="height of the full levels zt", units="m")
         ds["theta_e"].attrs.update(long_name="equivalent potential temperature at 1000 hPa (bin centers)", units="K")
         ds.attrs.update(member=args.member, domain=args.domain, time_index=it, cell_area=area_cell,
-                        masked_points=int(nmask), catalog=CATALOG,
+                        masked_points=int(nmask), catalog=CATALOG, refs=args.refs or "",
                         bins_theta_e=f"{bins['th_min']},{bins['th_max']},{bins['nbin']}")
         edge = (area[:, 0].sum() + area[:, -1].sum()) / area.sum()
         ds.attrs["edge_bin_area_fraction"] = float(edge)
