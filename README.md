@@ -58,6 +58,8 @@ outside the repository first.
   `scripts/cloud_botany_nan_report.py` lists the blocks of missing data from those logs, and
   `scripts/cloud_botany_find_chunks.py` names the Zarr chunk objects behind them that Swift
   lists but cannot serve; `scripts/cloud_botany_find_chunks.sbatch` runs both over all members.
+  `cloud_botany_iso.py --refs` reads through DKRZ's reference file with the re-created chunks;
+  `scripts/cloud_botany_redo.sbatch` redoes the affected snapshots with it into a separate directory.
 
 ```
 python scripts/sam_iso_integrals.py RUN_DIR RUN_NAME [-o OUTPUT] [--times START:STOP:STEP]
