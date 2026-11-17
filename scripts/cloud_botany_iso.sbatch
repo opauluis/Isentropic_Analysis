@@ -3,6 +3,9 @@
 # Levante needs a project account, given on the command line:
 #   sbatch --account=<project> scripts/cloud_botany_iso.sbatch              # all members that did not crash
 #   sbatch --account=<project> --array=0 scripts/cloud_botany_iso.sbatch    # member 1 only, as a first test
+# Arguments after the script name go to cloud_botany_iso.py, and OUT may be set in the environment:
+#   OUT=/work/<project>/$USER/cloud_botany_iso/per_time sbatch --account=<project> \
+#       scripts/cloud_botany_iso.sbatch --refs     # read through DKRZ's file with the re-created chunks
 # Output: $OUT/EXP_<member>/CB_ISO_EXP_<member>_TIME_<time>.nc; a resubmitted task skips the
 # times already written. Members 7, 15, 38, 39 and 47 crashed and are left out of MEMBERS.
 # Sized on member 1 (2026-10-31): 60 snapshots in 2 h 24 min, peak RSS 9.6 GB.
@@ -18,11 +21,11 @@
 set -euo pipefail
 MEMBERS=($(seq 1 103 | grep -vxE '7|15|38|39|47'))
 REPO=$HOME/Isentropic_Analysis
-OUT=/scratch/${USER:0:1}/$USER/ISO/Cloud_Botany
+OUT=${OUT:-/scratch/${USER:0:1}/$USER/ISO/Cloud_Botany}
 
 eval "$(micromamba shell hook --shell bash)"
 micromamba activate analysis
 export PYTHONPATH=$REPO${PYTHONPATH:+:$PYTHONPATH}
-python -c "import intake, intake_xarray, jinja2, zarr, aiohttp"  # fail early if a reader is missing
+python -c "import intake, intake_xarray, jinja2, zarr, aiohttp, pyarrow"  # fail early if a reader is missing
 
-python -u "$REPO/scripts/cloud_botany_iso.py" "${MEMBERS[$SLURM_ARRAY_TASK_ID]}" :: "$OUT"
+python -u "$REPO/scripts/cloud_botany_iso.py" "${MEMBERS[$SLURM_ARRAY_TASK_ID]}" :: "$OUT" "$@"
