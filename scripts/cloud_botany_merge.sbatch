@@ -3,7 +3,8 @@
 #   sbatch scripts/cloud_botany_merge.sbatch            # every member found on scratch
 # Writes /work/mh1569/$USER/cloud_botany_iso/CB_ISO_EXP_<member>.nc (about 7-8 GB in total before
 # compression) plus each member's nan_log.csv; each file is read back and checked against the
-# inputs. The scratch files are not deleted.
+# inputs. Times redone by cloud_botany_redo.sbatch (in Cloud_Botany_redo) replace the originals.
+# The scratch files are not deleted.
 #SBATCH --job-name=cb_merge
 #SBATCH --partition=shared
 #SBATCH --account=mh1569

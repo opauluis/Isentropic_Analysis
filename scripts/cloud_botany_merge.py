@@ -4,9 +4,12 @@ Reads SAVE_DIR/EXP_<m>/CB_ISO_EXP_<m>_TIME_*.nc, concatenates them along time, t
 attributes time_index, masked_points and edge_bin_area_fraction into variables on time, and writes
 WORK_DIR/CB_ISO_EXP_<m>.nc (zlib-compressed) with a copy of the member's nan_log.csv next to it.
 The merged file is read back and compared with the inputs before the script reports success;
-the scratch files are left in place.
+the scratch files are left in place. A time redone by cloud_botany_redo.sbatch (same file name
+under REDO_DIR, by default SAVE_DIR_redo) replaces the original; the variable redone marks it,
+and the redo directory's nan_log.csv is copied as CB_ISO_EXP_<m>_nan_log_redo.csv.
 
-    python scripts/cloud_botany_merge.py [MEMBERS] [--save-dir SAVE_DIR] [--work-dir WORK_DIR] [--force]
+    python scripts/cloud_botany_merge.py [MEMBERS] [--save-dir SAVE_DIR] [--redo-dir REDO_DIR]
+        [--work-dir WORK_DIR] [--force]
 
 MEMBERS is a comma list or a range such as 1-103 (default: every EXP_* directory). Times with no
 data (member 11, the 48 h runs after 48 h) have no input file and are absent from the merged time
@@ -37,8 +40,9 @@ def parse_members(text, save_dir):
     return out
 
 
-def merge(member, save_dir, work_dir, force):
+def merge(member, save_dir, redo_dir, work_dir, force):
     src = save_dir / f"EXP_{member:03d}"
+    redo = redo_dir / f"EXP_{member:03d}"
     files = sorted(src.glob(f"CB_ISO_EXP_{member:03d}_TIME_*.nc"))
     out = work_dir / f"CB_ISO_EXP_{member:03d}.nc"
     if not files:
@@ -46,15 +50,21 @@ def merge(member, save_dir, work_dir, force):
     if out.exists() and not force:
         return f"member {member}: {out.name} exists, skipped (--force to redo)"
 
-    parts = []
+    parts, nredone = [], 0
     for f in files:
-        with xr.open_dataset(f) as d:
+        redone = (redo / f.name).exists()
+        nredone += redone
+        with xr.open_dataset(redo / f.name if redone else f) as d:
             d = d.load()
+        d["redone"] = ("time", [int(redone)], {"long_name": "1 if the time was redone through the "
+                                                             "reference file with the re-created chunks"})
+        d.attrs.pop("refs", None)
         for name, (long_name, units) in PER_TIME_ATTRS.items():
             d[name] = ("time", [d.attrs.pop(name)], {"long_name": long_name, "units": units})
         parts.append(d)
     ds = xr.concat(parts, "time", combine_attrs="drop_conflicts").sortby("time")
-    ds.attrs["source_files"] = f"{len(files)} files {src}/CB_ISO_EXP_{member:03d}_TIME_*.nc"
+    ds.attrs["source_files"] = (f"{len(files)} files {src}/CB_ISO_EXP_{member:03d}_TIME_*.nc"
+                                + (f", {nredone} of them from {redo}" if nredone else ""))
     enc = {v: {"zlib": True, "complevel": 4} for v in ds.data_vars}
     enc["time"] = {"units": "hours since 2020-02-01 00:00:00", "dtype": "f8"}  # same axis for every member
     tmp = out.with_suffix(".nc.tmp")
@@ -70,7 +80,9 @@ def merge(member, save_dir, work_dir, force):
     log = src / "nan_log.csv"
     if log.exists():
         shutil.copy2(log, work_dir / f"CB_ISO_EXP_{member:03d}_nan_log.csv")
-    return (f"member {member}: {len(files)} times -> {out} "
+    if (redo / "nan_log.csv").exists():
+        shutil.copy2(redo / "nan_log.csv", work_dir / f"CB_ISO_EXP_{member:03d}_nan_log_redo.csv")
+    return (f"member {member}: {len(files)} times ({nredone} redone) -> {out} "
             f"({out.stat().st_size / 1e6:.0f} MB, time_index {int(ds.time_index.min())}-{int(ds.time_index.max())})")
 
 
@@ -79,16 +91,18 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("members", nargs="?", default=None)
     p.add_argument("--save-dir", type=Path, default=Path(f"/scratch/{user[0]}/{user}/ISO/Cloud_Botany"))
+    p.add_argument("--redo-dir", type=Path, default=None, help="redone times (default: SAVE_DIR_redo)")
     p.add_argument("--work-dir", type=Path, default=Path(f"/work/mh1569/{user}/cloud_botany_iso"))
     p.add_argument("--force", action="store_true", help="redo members whose merged file exists")
     args = p.parse_args()
+    redo_dir = args.redo_dir or args.save_dir.with_name(args.save_dir.name + "_redo")
 
     args.work_dir.mkdir(parents=True, exist_ok=True)
     for name in ("nan_report.csv", "bad_chunks.csv"):  # the run-wide reports, if present
         if (args.save_dir / name).exists():
             shutil.copy2(args.save_dir / name, args.work_dir / name)
     for m in parse_members(args.members, args.save_dir):
-        print(merge(m, args.save_dir, args.work_dir, args.force), flush=True)
+        print(merge(m, args.save_dir, redo_dir, args.work_dir, args.force), flush=True)
 
 
 if __name__ == "__main__":
