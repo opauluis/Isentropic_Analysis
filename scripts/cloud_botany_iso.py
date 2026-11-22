@@ -97,7 +97,7 @@ class RefsEntry:
                 remote_options=dict(asynchronous=True))))
 
 
-def load_field(entry, name, sel, retries, log, backoff=2.0):
+def load_field(entry, name, sel, retries, log, backoff=2.0, fallback=None, first=1):
     """One 3D field as a numpy array (z, y, x), or None if the snapshot has no data.
 
     Zarr fills a chunk that it fails to fetch from Swift with NaNs instead of raising, so NaNs
@@ -105,9 +105,12 @@ def load_field(entry, name, sel, retries, log, backoff=2.0):
     accepted only when they are at the same points in two consecutive reads; they are then
     masked out of the sums. A field that is NaN everywhere in two reads has no data (run ended).
     Every read is passed to log(attempt, nnan, status), with nnan = -1 for a read error.
+    If every read raised an error and a fallback entry is given (the catalog store when reading
+    through a reference file), the field is read from it instead: a chunk the reference file cannot
+    resolve, such as the four DKRZ could not recover, then comes back as NaN and is masked.
     """
-    previous = None
-    for attempt in range(1, retries + 1):
+    previous, nerror = None, 0
+    for attempt in range(first, first + retries):
         try:
             a = entry.to_dask()[name].sel(sel).values
             nan = np.isnan(a)
@@ -124,14 +127,17 @@ def load_field(entry, name, sel, retries, log, backoff=2.0):
                 print(f"  {name}: {nnan} NaNs at the same points in two reads, masked")
                 return a
             log(attempt, nnan, "retry")
-            print(f"  {name}: {nnan} NaNs on attempt {attempt}/{retries}, reading again")
+            print(f"  {name}: {nnan} NaNs on attempt {attempt}/{first + retries - 1}, reading again")
             previous = nan
         except Exception as err:
             log(attempt, -1, "error")
-            print(f"  {name}: read error on attempt {attempt}/{retries}: {err}")
-            previous = None
-        if attempt < retries:
-            clock.sleep(backoff ** attempt)
+            print(f"  {name}: read error on attempt {attempt}/{first + retries - 1}: {err}")
+            previous, nerror = None, nerror + 1
+        if attempt < first + retries - 1:
+            clock.sleep(backoff ** (attempt - first + 1))
+    if fallback is not None and nerror == retries:
+        print(f"  {name}: every read through the reference file failed, reading the catalog store")
+        return load_field(fallback, name, sel, retries, log, backoff, first=first + retries)
     raise ReadError(f"no consistent '{name}' after {retries} attempts")
 
 
@@ -165,6 +171,7 @@ def main():
 
     cat = intake.open_catalog(CATALOG).simulations.DALES.botany.dx100m[args.domain]
     entry3d = RefsEntry(args.refs) if args.refs else cat["3D"]
+    fallback3d = cat["3D"] if args.refs else None  # zarr fills a chunk it cannot fetch with NaN
     ds3d = entry3d.to_dask().sel(member=args.member)
     rhobf = cat["profiles"].to_dask()["rhobf"].sel(member=args.member)
     nz = ds3d.sizes["zt"] - 1  # w is needed on the level above
@@ -196,7 +203,7 @@ def main():
                     reads[name].append((attempt, nnan, status))
                     with open(nan_log, "a") as f:
                         f.write(f"{args.member},{it},{t},{name},{attempt},{nnan},{status}\n")
-                fields[name] = load_field(entry3d, name, sel, args.retries, log)
+                fields[name] = load_field(entry3d, name, sel, args.retries, log, fallback=fallback3d)
                 if fields[name] is None:
                     break
         except ReadError as err:
